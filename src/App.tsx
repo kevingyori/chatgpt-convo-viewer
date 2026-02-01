@@ -6,6 +6,7 @@ import {
   type ChangeEvent,
   type DragEvent,
 } from 'react'
+import FlexSearch from 'flexsearch'
 import {
   flexRender,
   getCoreRowModel,
@@ -94,6 +95,30 @@ type ChatPanelParams = {
   selectedMessages: DisplayMessage[]
   copied: boolean
   onCopyContext: () => void
+}
+
+type SearchRecord = {
+  id: string
+  conversationIndex: number
+  messageId: string
+  title: string
+  role: string
+  text: string
+  createTime?: number
+}
+
+type SearchResult = {
+  record: SearchRecord
+  snippet: string
+}
+
+type SearchPanelParams = {
+  query: string
+  status: 'idle' | 'building' | 'ready'
+  results: SearchResult[]
+  totalMessages: number
+  onQueryChange: (value: string) => void
+  onSelectResult: (record: SearchRecord) => void
 }
 
 const numberFormat = new Intl.NumberFormat('en-US')
@@ -417,6 +442,78 @@ function ChatPanel({
   )
 }
 
+function SearchPanel({
+  params,
+}: IDockviewPanelProps<SearchPanelParams>) {
+  if (!params) return null
+
+  return (
+    <div className="h-full flex flex-col gap-2 p-2">
+      <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+          Full Text Search
+        </div>
+        <div className="text-[10px] text-slate-500">
+          {params.status === 'building'
+            ? 'Indexing...'
+            : params.status === 'ready'
+              ? `${params.totalMessages.toLocaleString('en-US')} msgs`
+              : 'Idle'}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-slate-500">[?]</span>
+        <input
+          value={params.query}
+          onChange={(event) => params.onQueryChange(event.target.value)}
+          placeholder="Search all messages"
+          className="w-full border border-slate-800 bg-slate-950/80 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/70"
+        />
+      </div>
+
+      <div className="flex-1 border border-slate-800 bg-slate-950/50 overflow-auto">
+        {params.query.trim().length === 0 ? (
+          <div className="px-3 py-6 text-slate-600 text-[11px]">
+            Enter a query to search across all messages.
+          </div>
+        ) : params.status === 'building' ? (
+          <div className="px-3 py-6 text-slate-600 text-[11px]">
+            Building search index...
+          </div>
+        ) : params.results.length === 0 ? (
+          <div className="px-3 py-6 text-slate-600 text-[11px]">
+            No matches found.
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-900/80">
+            {params.results.map((result) => (
+              <button
+                key={result.record.id}
+                type="button"
+                onClick={() => params.onSelectResult(result.record)}
+                className="w-full text-left px-3 py-2 text-[11px] text-slate-200 hover:bg-slate-900/60 transition"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-slate-400 truncate">
+                    {result.record.title || 'Untitled'}
+                  </div>
+                  <div className="text-[10px] text-slate-600 uppercase tracking-[0.2em]">
+                    {result.record.role}
+                  </div>
+                </div>
+                <div className="text-slate-500 mt-1">
+                  {result.snippet || '—'}
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [fileName, setFileName] = useState<string | null>(null)
@@ -430,10 +527,19 @@ export default function App() {
     { id: 'updateTime', desc: true },
   ])
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [searchStatus, setSearchStatus] = useState<
+    'idle' | 'building' | 'ready'
+  >('idle')
 
   const dockviewApiRef = useRef<DockviewApi | null>(null)
   const conversationsPanelRef = useRef<IDockviewPanel | null>(null)
   const chatPanelRef = useRef<IDockviewPanel | null>(null)
+  const searchPanelRef = useRef<IDockviewPanel | null>(null)
+  const searchIndexRef = useRef<FlexSearch.Index | null>(null)
+  const searchRecordsRef = useRef<Map<string, SearchRecord>>(new Map())
+  const searchBuildIdRef = useRef(0)
 
   const rows = useMemo<ConversationRow[]>(() => {
     return conversations.map((conversation, index) => {
@@ -479,6 +585,71 @@ export default function App() {
     }
   }, [rows])
 
+  useEffect(() => {
+    const buildId = searchBuildIdRef.current + 1
+    searchBuildIdRef.current = buildId
+
+    const records = new Map<string, SearchRecord>()
+    const index = new FlexSearch.Index({
+      tokenize: 'forward',
+      cache: 200,
+      resolution: 9,
+    })
+
+    if (conversations.length === 0) {
+      searchIndexRef.current = index
+      searchRecordsRef.current = records
+      setSearchStatus('idle')
+      setSearchResults([])
+      return
+    }
+
+    setSearchStatus('building')
+    setSearchResults([])
+
+    const buildIndex = async () => {
+      let count = 0
+      for (let cIndex = 0; cIndex < conversations.length; cIndex += 1) {
+        const conversation = conversations[cIndex]
+        const mappingNodes = Object.values(conversation.mapping ?? {})
+        for (const node of mappingNodes) {
+          const message = node?.message
+          if (!message) continue
+          const parts = Array.isArray(message.content?.parts)
+            ? message.content?.parts ?? []
+            : []
+          const text = parts.map((part) => String(part)).join('\n').trim()
+          if (!text) continue
+          const id = `m-${cIndex}-${count}`
+          const role = message.author?.role ?? 'other'
+          const title = conversation.title ?? 'Untitled'
+          index.add(id, `${text}\n${title}\n${role}`)
+          records.set(id, {
+            id,
+            conversationIndex: cIndex,
+            messageId: node?.id ?? id,
+            title,
+            role,
+            text,
+            createTime: message.create_time,
+          })
+          count += 1
+          if (count % 500 === 0) {
+            await new Promise((resolve) => setTimeout(resolve, 0))
+            if (searchBuildIdRef.current !== buildId) return
+          }
+        }
+      }
+
+      if (searchBuildIdRef.current !== buildId) return
+      searchIndexRef.current = index
+      searchRecordsRef.current = records
+      setSearchStatus('ready')
+    }
+
+    void buildIndex()
+  }, [conversations])
+
   const selectedConversation = useMemo(() => {
     if (selectedIndex === null) return null
     return conversations[selectedIndex] ?? null
@@ -488,6 +659,28 @@ export default function App() {
     if (!selectedConversation) return []
     return extractMessages(selectedConversation)
   }, [selectedConversation])
+
+  useEffect(() => {
+    const query = searchQuery.trim()
+    if (!query) {
+      setSearchResults([])
+      return
+    }
+    if (searchStatus !== 'ready' || !searchIndexRef.current) return
+
+    const matches = searchIndexRef.current.search(query, 200) as string[]
+    const records = searchRecordsRef.current
+    const results: SearchResult[] = []
+    for (const id of matches) {
+      const record = records.get(String(id))
+      if (!record) continue
+      results.push({
+        record,
+        snippet: buildSnippet(record.text, query),
+      })
+    }
+    setSearchResults(results)
+  }, [searchQuery, searchStatus])
 
   const handleCopyContext = async () => {
     if (!selectedConversation) return
@@ -616,6 +809,21 @@ export default function App() {
     [selectedConversation, selectedMessages, copied],
   )
 
+  const searchParams = useMemo<SearchPanelParams>(
+    () => ({
+      query: searchQuery,
+      status: searchStatus,
+      results: searchResults,
+      totalMessages: stats.totalMessages,
+      onQueryChange: setSearchQuery,
+      onSelectResult: (record) => {
+        setSelectedIndex(record.conversationIndex)
+        chatPanelRef.current?.api.setActive()
+      },
+    }),
+    [searchQuery, searchStatus, searchResults, stats.totalMessages],
+  )
+
   const handleDockReady = (event: DockviewReadyEvent) => {
     if (dockReady) return
     setDockReady(true)
@@ -625,6 +833,18 @@ export default function App() {
       component: 'conversations',
       title: 'CONVERSATIONS',
       params: conversationsParams,
+    })
+    searchPanelRef.current = event.api.addPanel({
+      id: 'search',
+      component: 'search',
+      title: 'SEARCH',
+      position: {
+        referencePanel: 'conversations',
+        direction: 'within',
+        index: 1,
+      },
+      params: searchParams,
+      inactive: true,
     })
     chatPanelRef.current = event.api.addPanel({
       id: 'chat',
@@ -647,10 +867,15 @@ export default function App() {
     chatPanelRef.current?.api.updateParameters(chatParams)
   }, [chatParams])
 
+  useEffect(() => {
+    searchPanelRef.current?.api.updateParameters(searchParams)
+  }, [searchParams])
+
   const dockviewComponents = useMemo(
     () => ({
       conversations: ConversationsPanel,
       chat: ChatPanel,
+      search: SearchPanel,
     }),
     [],
   )
@@ -714,6 +939,20 @@ function formatTimestamp(value?: number) {
   const date = new Date(value * 1000)
   if (Number.isNaN(date.getTime())) return '—'
   return dateFormat.format(date)
+}
+
+function buildSnippet(text: string, query: string) {
+  const lowerText = text.toLowerCase()
+  const lowerQuery = query.toLowerCase()
+  const matchIndex = lowerText.indexOf(lowerQuery)
+  if (matchIndex === -1) {
+    return text.slice(0, 140)
+  }
+  const start = Math.max(0, matchIndex - 60)
+  const end = Math.min(text.length, matchIndex + lowerQuery.length + 60)
+  const prefix = start > 0 ? '…' : ''
+  const suffix = end < text.length ? '…' : ''
+  return `${prefix}${text.slice(start, end)}${suffix}`
 }
 
 type DisplayMessage = {
