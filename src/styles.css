@@ -1,9 +1,12 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap");
+@import "dockview/dist/styles/dockview.css";
 @import "tailwindcss";
 
 body {
   @apply m-0;
-  font-family: "Space Grotesk", "Segoe UI", "Helvetica Neue", sans-serif;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco,
+    Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 12px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -11,4 +14,13 @@ body {
 code {
   font-family: "JetBrains Mono", Menlo, Monaco, Consolas, "Courier New",
     monospace;
+}
+
+.dockview-host {
+  height: calc(100vh - 60px);
+}
+
+.dockview-host__inner {
+  height: 100%;
+  width: 100%;
 }

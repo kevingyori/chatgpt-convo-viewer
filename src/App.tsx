@@ -1,0 +1,786 @@
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type DragEvent,
+} from 'react'
+import {
+  flexRender,
+  getCoreRowModel,
+  getFilteredRowModel,
+  getSortedRowModel,
+  useReactTable,
+  type ColumnDef,
+  type FilterFn,
+  type SortingState,
+} from '@tanstack/react-table'
+import {
+  DockviewReact,
+  type DockviewApi,
+  type DockviewReadyEvent,
+  type IDockviewPanel,
+  type IDockviewPanelProps,
+} from 'dockview'
+
+type Conversation = {
+  title?: string
+  create_time?: number
+  update_time?: number
+  mapping?: Record<string, MappingNode>
+  current_node?: string
+  is_archived?: boolean
+  conversation_id?: string
+  id?: string
+}
+
+type MappingNode = {
+  id?: string
+  message?: {
+    author?: {
+      role?: string
+    }
+    create_time?: number
+    content?: {
+      content_type?: string
+      parts?: unknown[]
+    }
+  }
+}
+
+type ConversationRow = {
+  id: string
+  title: string
+  createTime?: number
+  updateTime?: number
+  messageCount: number
+  userCount: number
+  assistantCount: number
+  currentNode?: string
+  isArchived: boolean
+  conversationId?: string
+  sourceIndex: number
+}
+
+type Stats = {
+  total: number
+  totalMessages: number
+  archived: number
+  latestUpdate?: number
+}
+
+type ConversationsPanelParams = {
+  fileName: string | null
+  loading: boolean
+  error: string | null
+  stats: Stats
+  rows: ConversationRow[]
+  globalFilter: string
+  sorting: SortingState
+  isDragging: boolean
+  setGlobalFilter: (value: string) => void
+  setSorting: (value: SortingState) => void
+  setIsDragging: (value: boolean) => void
+  onFileChange: (event: ChangeEvent<HTMLInputElement>) => void
+  onDrop: (event: DragEvent<HTMLButtonElement>) => void
+  onClear: () => void
+  onSelectRow: (index: number) => void
+  selectedIndex: number | null
+}
+
+type ChatPanelParams = {
+  selectedConversation: Conversation | null
+  selectedMessages: DisplayMessage[]
+  copied: boolean
+  onCopyContext: () => void
+}
+
+const numberFormat = new Intl.NumberFormat('en-US')
+const dateFormat = new Intl.DateTimeFormat('en-US', {
+  dateStyle: 'medium',
+  timeStyle: 'short',
+})
+
+const columns: ColumnDef<ConversationRow>[] = [
+  {
+    accessorKey: 'title',
+    header: 'Title',
+    cell: (info) => info.getValue<string>() || 'Untitled',
+  },
+  {
+    accessorKey: 'createTime',
+    header: 'Created',
+    cell: (info) => formatTimestamp(info.getValue<number | undefined>()),
+  },
+  {
+    accessorKey: 'updateTime',
+    header: 'Updated',
+    cell: (info) => formatTimestamp(info.getValue<number | undefined>()),
+  },
+  {
+    accessorKey: 'messageCount',
+    header: 'Messages',
+    cell: (info) => numberFormat.format(info.getValue<number>()),
+  },
+  {
+    accessorKey: 'userCount',
+    header: 'User',
+    cell: (info) => numberFormat.format(info.getValue<number>()),
+  },
+  {
+    accessorKey: 'assistantCount',
+    header: 'Assistant',
+    cell: (info) => numberFormat.format(info.getValue<number>()),
+  },
+  {
+    accessorKey: 'isArchived',
+    header: 'Archived',
+    cell: (info) => (info.getValue<boolean>() ? 'Yes' : 'No'),
+  },
+  {
+    accessorKey: 'currentNode',
+    header: 'Current Node',
+    cell: (info) => info.getValue<string>() || '—',
+  },
+  {
+    accessorKey: 'conversationId',
+    header: 'Conversation ID',
+    cell: (info) => info.getValue<string>() || '—',
+  },
+  {
+    accessorKey: 'id',
+    header: 'Record ID',
+    cell: (info) => info.getValue<string>(),
+  },
+]
+
+const globalFilterFn: FilterFn<ConversationRow> = (row, _columnId, value) => {
+  const filter = String(value ?? '').trim().toLowerCase()
+  if (!filter) return true
+  const haystack = [
+    row.original.title,
+    row.original.id,
+    row.original.conversationId,
+    row.original.currentNode,
+    row.original.isArchived ? 'yes' : 'no',
+    row.original.messageCount,
+    row.original.userCount,
+    row.original.assistantCount,
+    row.original.createTime,
+    row.original.updateTime,
+  ]
+    .map((entry) => (entry === undefined ? '' : String(entry)))
+    .join(' ')
+    .toLowerCase()
+  return haystack.includes(filter)
+}
+
+function ConversationsPanel({
+  params,
+}: IDockviewPanelProps<ConversationsPanelParams>) {
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  if (!params) return null
+
+  const dragClass = params.isDragging
+    ? ' border-cyan-400/80 bg-cyan-500/10'
+    : ''
+
+  const table = useReactTable({
+    data: params.rows,
+    columns,
+    state: {
+      sorting: params.sorting,
+      globalFilter: params.globalFilter,
+    },
+    onSortingChange: params.setSorting,
+    onGlobalFilterChange: params.setGlobalFilter,
+    globalFilterFn,
+    getCoreRowModel: getCoreRowModel(),
+    getFilteredRowModel: getFilteredRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  })
+
+  return (
+    <div className="h-full flex flex-col gap-2 p-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            className={`inline-flex items-center gap-2 border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300 cursor-pointer hover:border-cyan-400/70${dragClass}`}
+            onClick={() => inputRef.current?.click()}
+            onDragEnter={(event) => {
+              event.preventDefault()
+              params.setIsDragging(true)
+            }}
+            onDragOver={(event) => {
+              event.preventDefault()
+              params.setIsDragging(true)
+            }}
+            onDragLeave={() => params.setIsDragging(false)}
+            onDrop={params.onDrop}
+          >
+            <span className="text-cyan-300">[+]</span>
+            <span>Load file</span>
+          </button>
+          <input
+            ref={inputRef}
+            className="sr-only"
+            type="file"
+            accept=".json,application/json"
+            onChange={params.onFileChange}
+          />
+          <span className="text-[11px] text-slate-500">
+            {params.fileName ?? 'No file loaded'}
+          </span>
+          {params.loading ? (
+            <span className="text-cyan-300 text-[11px]">Parsing…</span>
+          ) : null}
+          {params.error ? (
+            <span className="text-rose-300 text-[11px]">{params.error}</span>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={params.onClear}
+            className="inline-flex items-center gap-2 border border-slate-700 bg-slate-950 px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-rose-400/70 hover:text-white transition"
+          >
+            <span className="text-rose-300">[x]</span> Clear
+          </button>
+          <div className="text-[11px] text-slate-500">
+            Total:{' '}
+            <span className="text-slate-200">
+              {numberFormat.format(params.stats.total)}
+            </span>{' '}
+            | Msg:{' '}
+            <span className="text-slate-200">
+              {numberFormat.format(params.stats.totalMessages)}
+            </span>{' '}
+            | Archived:{' '}
+            <span className="text-slate-200">
+              {numberFormat.format(params.stats.archived)}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-slate-500">[?]</span>
+        <input
+          value={params.globalFilter}
+          onChange={(event) => params.setGlobalFilter(event.target.value)}
+          placeholder="Filter conversations"
+          className="w-full border border-slate-800 bg-slate-950/80 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/70"
+        />
+      </div>
+
+      <div className="flex-1 border border-slate-800 bg-slate-950/50 overflow-hidden">
+        <div className="overflow-auto h-full">
+          <table className="w-full text-[11px]">
+            <thead className="bg-slate-900/80 text-[10px] uppercase tracking-[0.2em] text-slate-500">
+              {table.getHeaderGroups().map((headerGroup) => (
+                <tr key={headerGroup.id}>
+                  {headerGroup.headers.map((header) => {
+                    const sorted = header.column.getIsSorted()
+                    return (
+                      <th
+                        key={header.id}
+                        className="px-2 py-1 text-left font-semibold cursor-pointer select-none"
+                        onClick={header.column.getToggleSortingHandler()}
+                      >
+                        <span className="inline-flex items-center gap-1.5">
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext(),
+                              )}
+                          {sorted === 'asc' ? '↑' : null}
+                          {sorted === 'desc' ? '↓' : null}
+                        </span>
+                      </th>
+                    )
+                  })}
+                </tr>
+              ))}
+            </thead>
+            <tbody className="divide-y divide-slate-900/80">
+              {table.getRowModel().rows.length > 0 ? (
+                table.getRowModel().rows.map((row) => (
+                  <tr
+                    key={row.id}
+                    className={
+                      params.selectedIndex === row.original.sourceIndex
+                        ? 'bg-slate-900/80'
+                        : 'hover:bg-slate-900/60 transition cursor-pointer'
+                    }
+                    onClick={() => params.onSelectRow(row.original.sourceIndex)}
+                  >
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="px-2 py-1 text-slate-200">
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan={columns.length}
+                    className="px-3 py-6 text-center text-slate-500 text-[11px]"
+                  >
+                    {params.rows.length === 0
+                      ? 'Load a file to see conversations.'
+                      : 'No conversations match your filter.'}
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ChatPanel({
+  params,
+}: IDockviewPanelProps<ChatPanelParams>) {
+  if (!params) return null
+
+  return (
+    <div className="h-full flex flex-col gap-2 p-2">
+      <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
+        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 truncate">
+          {params.selectedConversation?.title || 'Chat'}
+        </div>
+        {params.selectedConversation ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={params.onCopyContext}
+              className="inline-flex items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
+            >
+              <span className="text-cyan-300">[→]</span>
+              {params.copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        ) : null}
+      </div>
+
+      <div className="flex-1 border border-slate-800 bg-slate-950/50 p-2 overflow-auto">
+        {!params.selectedConversation ? (
+          <div className="text-center text-slate-600 text-[11px] py-8">
+            Select a conversation.
+          </div>
+        ) : params.selectedMessages.length === 0 ? (
+          <div className="text-center text-slate-600 text-[11px] py-8">
+            No messages to display.
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {params.selectedMessages.map((message) => {
+              const role = message.authorRole
+              const isUser = role === 'user'
+              const isAssistant = role === 'assistant'
+              return (
+                <div
+                  key={message.id}
+                  className={`grid grid-cols-[80px_1fr] gap-2 text-[11px] ${
+                    isUser
+                      ? 'text-cyan-100'
+                      : isAssistant
+                        ? 'text-slate-200'
+                        : 'text-slate-400'
+                  }`}
+                >
+                  <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 truncate pr-1">
+                    {role || 'other'}
+                  </div>
+                  <div className="leading-relaxed whitespace-pre-wrap">
+                    {message.text || '—'}
+                    <span className="block text-[10px] text-slate-600 mt-1">
+                      {formatTimestamp(message.createTime)}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default function App() {
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [fileName, setFileName] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [dockReady, setDockReady] = useState(false)
+  const [globalFilter, setGlobalFilter] = useState('')
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'updateTime', desc: true },
+  ])
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null)
+
+  const dockviewApiRef = useRef<DockviewApi | null>(null)
+  const conversationsPanelRef = useRef<IDockviewPanel | null>(null)
+  const chatPanelRef = useRef<IDockviewPanel | null>(null)
+
+  const rows = useMemo<ConversationRow[]>(() => {
+    return conversations.map((conversation, index) => {
+      const mappingNodes = Object.values(conversation.mapping ?? {})
+      const messageNodes = mappingNodes.filter((node) => node?.message)
+      const userCount = messageNodes.filter(
+        (node) => node?.message?.author?.role === 'user',
+      ).length
+      const assistantCount = messageNodes.filter(
+        (node) => node?.message?.author?.role === 'assistant',
+      ).length
+
+      return {
+        id: conversation.id ?? `row-${index + 1}`,
+        title: conversation.title ?? '',
+        createTime: conversation.create_time,
+        updateTime: conversation.update_time,
+        messageCount: messageNodes.length,
+        userCount,
+        assistantCount,
+        currentNode: conversation.current_node ?? undefined,
+        isArchived: Boolean(conversation.is_archived),
+        conversationId: conversation.conversation_id ?? undefined,
+        sourceIndex: index,
+      }
+    })
+  }, [conversations])
+
+  const stats = useMemo<Stats>(() => {
+    const totalMessages = rows.reduce(
+      (sum, row) => sum + row.messageCount,
+      0,
+    )
+    const archived = rows.filter((row) => row.isArchived).length
+    return {
+      total: rows.length,
+      totalMessages,
+      archived,
+      latestUpdate:
+        rows.length > 0
+          ? Math.max(...rows.map((row) => row.updateTime ?? row.createTime ?? 0))
+          : undefined,
+    }
+  }, [rows])
+
+  const selectedConversation = useMemo(() => {
+    if (selectedIndex === null) return null
+    return conversations[selectedIndex] ?? null
+  }, [conversations, selectedIndex])
+
+  const selectedMessages = useMemo(() => {
+    if (!selectedConversation) return []
+    return extractMessages(selectedConversation)
+  }, [selectedConversation])
+
+  const handleCopyContext = async () => {
+    if (!selectedConversation) return
+    const text = buildContextText(selectedConversation, selectedMessages)
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    } catch {
+      fallbackCopy(text)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1600)
+    }
+  }
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget
+    const file = input.files?.[0]
+    if (!file) return
+    await handleFile(file)
+    if (input.isConnected) {
+      input.value = ''
+    }
+  }
+
+  const handleFile = async (file: File) => {
+    console.info('[upload] selected', {
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    })
+    setError(null)
+    setLoading(true)
+    setFileName(file.name)
+    try {
+      const text = await file.text()
+      console.info('[upload] read', {
+        chars: text.length,
+        preview: text.slice(0, 200),
+      })
+      const parsed = JSON.parse(text)
+      console.info('[upload] parsed', {
+        kind: Array.isArray(parsed) ? 'array' : typeof parsed,
+        keys:
+          parsed && typeof parsed === 'object'
+            ? Object.keys(parsed as Record<string, unknown>).slice(0, 12)
+            : null,
+      })
+      const normalized = normalizeConversations(parsed)
+      console.info('[upload] normalized', {
+        count: normalized.length,
+      })
+      if (normalized.length === 0) {
+        throw new Error(
+          'No conversation records found. Ensure you selected conversations.json.',
+        )
+      }
+      setConversations(normalized)
+      setSelectedIndex(null)
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : 'Unable to parse the JSON file.'
+      setError(message)
+      setConversations([])
+      setSelectedIndex(null)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleDrop = (event: DragEvent<HTMLButtonElement>) => {
+    event.preventDefault()
+    setIsDragging(false)
+    const file = event.dataTransfer?.files?.[0]
+    if (file) {
+      void handleFile(file)
+    }
+  }
+
+  const conversationsParams = useMemo<ConversationsPanelParams>(
+    () => ({
+      fileName,
+      loading,
+      error,
+      stats,
+      rows,
+      globalFilter,
+      sorting,
+      isDragging,
+      setGlobalFilter,
+      setSorting,
+      setIsDragging,
+      onFileChange: handleFileChange,
+      onDrop: handleDrop,
+      onClear: () => {
+        setConversations([])
+        setFileName(null)
+        setError(null)
+        setGlobalFilter('')
+        setSorting([{ id: 'updateTime', desc: true }])
+        setSelectedIndex(null)
+      },
+      onSelectRow: (index) => setSelectedIndex(index),
+      selectedIndex,
+    }),
+    [
+      fileName,
+      loading,
+      error,
+      stats,
+      rows,
+      globalFilter,
+      sorting,
+      isDragging,
+      selectedIndex,
+    ],
+  )
+
+  const chatParams = useMemo<ChatPanelParams>(
+    () => ({
+      selectedConversation,
+      selectedMessages,
+      copied,
+      onCopyContext: handleCopyContext,
+    }),
+    [selectedConversation, selectedMessages, copied],
+  )
+
+  const handleDockReady = (event: DockviewReadyEvent) => {
+    if (dockReady) return
+    setDockReady(true)
+    dockviewApiRef.current = event.api
+    conversationsPanelRef.current = event.api.addPanel({
+      id: 'conversations',
+      component: 'conversations',
+      title: 'CONVERSATIONS',
+      params: conversationsParams,
+    })
+    chatPanelRef.current = event.api.addPanel({
+      id: 'chat',
+      component: 'chat',
+      title: 'CHAT',
+      position: {
+        referencePanel: 'conversations',
+        direction: 'right',
+      },
+      initialWidth: 460,
+      params: chatParams,
+    })
+  }
+
+  useEffect(() => {
+    conversationsPanelRef.current?.api.updateParameters(conversationsParams)
+  }, [conversationsParams])
+
+  useEffect(() => {
+    chatPanelRef.current?.api.updateParameters(chatParams)
+  }, [chatParams])
+
+  const dockviewComponents = useMemo(
+    () => ({
+      conversations: ConversationsPanel,
+      chat: ChatPanel,
+    }),
+    [],
+  )
+
+  return (
+    <div className="min-h-screen bg-[#0a0c0f] text-slate-100">
+      <main className="mx-auto px-3 py-4 h-full">
+        <section className="flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.25em] text-slate-500">
+          <span className="text-slate-300 font-semibold">CHATGPT EXPORT</span>
+          <span className="text-slate-500">/</span>
+          <span className="text-slate-400">CONVERSATIONS.JSON VIEWER</span>
+        </section>
+
+        <section className="mt-3">
+          <div className="dockview-host">
+            <DockviewReact
+              className="dockview-theme-dark border border-slate-800 dockview-host__inner"
+              onReady={handleDockReady}
+              components={dockviewComponents}
+            />
+          </div>
+        </section>
+      </main>
+    </div>
+  )
+}
+
+function normalizeConversations(value: unknown): Conversation[] {
+  if (Array.isArray(value)) return value as Conversation[]
+
+  if (value && typeof value === 'object') {
+    const maybeRecord = value as Record<string, unknown>
+    if (Array.isArray(maybeRecord.conversations)) {
+      return maybeRecord.conversations as Conversation[]
+    }
+    if (Array.isArray(maybeRecord.items)) {
+      return maybeRecord.items as Conversation[]
+    }
+    if (Array.isArray(maybeRecord.data)) {
+      return maybeRecord.data as Conversation[]
+    }
+
+    return Object.values(maybeRecord).filter(
+      (item): item is Conversation =>
+        Boolean(
+          item &&
+            typeof item === 'object' &&
+            ('mapping' in item ||
+              'title' in item ||
+              'id' in item ||
+              'conversation_id' in item),
+        ),
+    )
+  }
+
+  return []
+}
+
+function formatTimestamp(value?: number) {
+  if (!value) return '—'
+  const date = new Date(value * 1000)
+  if (Number.isNaN(date.getTime())) return '—'
+  return dateFormat.format(date)
+}
+
+type DisplayMessage = {
+  id: string
+  authorRole?: string
+  createTime?: number
+  text: string
+}
+
+function extractMessages(conversation: Conversation): DisplayMessage[] {
+  const mappingNodes = Object.values(conversation.mapping ?? {})
+  const messages = mappingNodes
+    .map((node) => {
+      const message = node?.message
+      if (!message) return null
+      const parts = Array.isArray(message.content?.parts)
+        ? message.content?.parts ?? []
+        : []
+      const text = parts.map((part) => String(part)).join('\n').trim()
+      return {
+        id: node?.id ?? message?.create_time?.toString() ?? 'message',
+        authorRole: message.author?.role,
+        createTime: message.create_time,
+        text,
+      }
+    })
+    .filter((message): message is DisplayMessage => Boolean(message))
+
+  return messages.sort((a, b) => (a.createTime ?? 0) - (b.createTime ?? 0))
+}
+
+function buildContextText(
+  conversation: Conversation,
+  messages: DisplayMessage[],
+) {
+  const header = [
+    '# ChatGPT Conversation Export',
+    `Title: ${conversation.title || 'Untitled'}`,
+    `Conversation ID: ${conversation.conversation_id || '—'}`,
+    `Created: ${formatTimestamp(conversation.create_time)}`,
+    `Updated: ${formatTimestamp(conversation.update_time)}`,
+    `Archived: ${conversation.is_archived ? 'Yes' : 'No'}`,
+    '',
+    '## Transcript',
+  ]
+
+  const body = messages.map((message, index) => {
+    const role = message.authorRole || 'other'
+    const stamp = message.createTime
+      ? ` (${formatTimestamp(message.createTime)})`
+      : ''
+    const label = `${index + 1}. ${role}${stamp}`
+    const content = message.text ? message.text : '—'
+    return `${label}\n${content}`
+  })
+
+  return [...header, ...body].join('\n\n')
+}
+
+function fallbackCopy(value: string) {
+  const textarea = document.createElement('textarea')
+  textarea.value = value
+  textarea.setAttribute('readonly', 'true')
+  textarea.style.position = 'fixed'
+  textarea.style.top = '-9999px'
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand('copy')
+  document.body.removeChild(textarea)
+}
