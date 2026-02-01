@@ -28,6 +28,11 @@ type MappingNode = {
     author?: {
       role?: string
     }
+    create_time?: number
+    content?: {
+      content_type?: string
+      parts?: unknown[]
+    }
   }
 }
 
@@ -42,6 +47,7 @@ type ConversationRow = {
   currentNode?: string
   isArchived: boolean
   conversationId?: string
+  sourceIndex: number
 }
 
 const numberFormat = new Intl.NumberFormat('en-US')
@@ -102,6 +108,7 @@ function App() {
   const [fileName, setFileName] = createSignal<string | null>(null)
   const [error, setError] = createSignal<string | null>(null)
   const [loading, setLoading] = createSignal(false)
+  const [isDragging, setIsDragging] = createSignal(false)
   const [globalFilter, setGlobalFilter] = createSignal('')
   const [sorting, setSorting] = createSignal<SortingState>([
     { id: 'updateTime', desc: true },
@@ -129,6 +136,7 @@ function App() {
         currentNode: conversation.current_node ?? undefined,
         isArchived: Boolean(conversation.is_archived),
         conversationId: conversation.conversation_id ?? undefined,
+        sourceIndex: index,
       }
     })
   })
@@ -173,11 +181,29 @@ function App() {
     getSortedRowModel: getSortedRowModel(),
   })
 
+  const [selectedIndex, setSelectedIndex] = createSignal<number | null>(null)
+
+  const selectedConversation = createMemo(() => {
+    const index = selectedIndex()
+    if (index === null) return null
+    return conversations()[index] ?? null
+  })
+
+  const selectedMessages = createMemo(() => {
+    const conversation = selectedConversation()
+    if (!conversation) return []
+    return extractMessages(conversation)
+  })
+
   const handleFileChange = async (event: Event) => {
     const target = event.currentTarget as HTMLInputElement
     const file = target.files?.[0]
     if (!file) return
+    await handleFile(file)
+    target.value = ''
+  }
 
+  const handleFile = async (file: File) => {
     setError(null)
     setLoading(true)
     setFileName(file.name)
@@ -191,14 +217,24 @@ function App() {
         )
       }
       setConversations(normalized)
+      setSelectedIndex(null)
     } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Unable to parse the JSON file.'
       setError(message)
       setConversations([])
+      setSelectedIndex(null)
     } finally {
       setLoading(false)
-      target.value = ''
+    }
+  }
+
+  const handleDrop = (event: DragEvent) => {
+    event.preventDefault()
+    setIsDragging(false)
+    const file = event.dataTransfer?.files?.[0]
+    if (file) {
+      void handleFile(file)
     }
   }
 
@@ -208,6 +244,7 @@ function App() {
     setError(null)
     setGlobalFilter('')
     setSorting([{ id: 'updateTime', desc: true }])
+    setSelectedIndex(null)
   }
 
   return (
@@ -252,10 +289,26 @@ function App() {
                 </Show>
               </div>
 
-              <label class="mt-5 flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-slate-700 bg-slate-950/60 px-6 py-10 text-center cursor-pointer hover:border-cyan-400/60 transition">
+              <label
+                class="mt-5 flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-slate-700 bg-slate-950/60 px-6 py-10 text-center cursor-pointer transition"
+                classList={{
+                  'border-cyan-400/80 bg-cyan-500/10': isDragging(),
+                  'hover:border-cyan-400/60': !isDragging(),
+                }}
+                onDragEnter={(event) => {
+                  event.preventDefault()
+                  setIsDragging(true)
+                }}
+                onDragOver={(event) => {
+                  event.preventDefault()
+                  setIsDragging(true)
+                }}
+                onDragLeave={() => setIsDragging(false)}
+                onDrop={handleDrop}
+              >
                 <FileUp class="w-8 h-8 text-cyan-300" />
                 <span class="text-sm text-slate-300">
-                  Click to select a file
+                  Click to select a file or drop it here
                 </span>
                 <span class="text-xs text-slate-500">conversations.json</span>
                 <input
@@ -394,7 +447,16 @@ function App() {
                   >
                     <For each={table.getRowModel().rows}>
                       {(row) => (
-                        <tr class="hover:bg-slate-900/60 transition">
+                        <tr
+                          class="hover:bg-slate-900/60 transition cursor-pointer"
+                          classList={{
+                            'bg-slate-900/70':
+                              selectedIndex() === row.original.sourceIndex,
+                          }}
+                          onClick={() =>
+                            setSelectedIndex(row.original.sourceIndex)
+                          }
+                        >
                           <For each={row.getVisibleCells()}>
                             {(cell) => (
                               <td class="px-4 py-3 text-slate-200">
@@ -412,6 +474,87 @@ function App() {
                 </tbody>
               </table>
             </div>
+          </div>
+        </section>
+
+        <section class="mt-12">
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 class="text-2xl font-semibold text-white">Chat View</h2>
+              <p class="text-sm text-slate-400 mt-1">
+                Select a conversation to read the message flow.
+              </p>
+            </div>
+            <Show when={selectedConversation()}>
+              {(conversation) => (
+                <div class="text-xs text-slate-400">
+                  {conversation().title || 'Untitled'} ·{' '}
+                  {formatTimestamp(conversation().update_time)}
+                </div>
+              )}
+            </Show>
+          </div>
+
+          <div class="mt-6 rounded-2xl border border-slate-800 bg-slate-950/40 p-6">
+            <Show
+              when={selectedConversation()}
+              fallback={
+                <div class="text-center text-slate-500 py-12">
+                  Pick a row above to see its chat transcript.
+                </div>
+              }
+            >
+              <Show
+                when={selectedMessages().length > 0}
+                fallback={
+                  <div class="text-center text-slate-500 py-12">
+                    This conversation has no messages to display.
+                  </div>
+                }
+              >
+                <div class="flex flex-col gap-4">
+                  <For each={selectedMessages()}>
+                    {(message) => {
+                      const role = message.authorRole
+                      const isUser = role === 'user'
+                      const isAssistant = role === 'assistant'
+                      return (
+                        <div
+                          class="flex"
+                          classList={{
+                            'justify-end': isUser,
+                            'justify-start': isAssistant,
+                            'justify-center': !isUser && !isAssistant,
+                          }}
+                        >
+                          <div
+                            class="max-w-2xl rounded-2xl border px-4 py-3 text-sm leading-relaxed"
+                            classList={{
+                              'bg-cyan-500/10 border-cyan-500/30 text-cyan-50':
+                                isUser,
+                              'bg-slate-900/80 border-slate-700 text-slate-100':
+                                isAssistant,
+                              'bg-slate-900/40 border-slate-800 text-slate-300':
+                                !isUser && !isAssistant,
+                            }}
+                          >
+                            <div class="flex items-center justify-between gap-3 text-[11px] uppercase tracking-[0.2em] text-slate-400">
+                              <span>{role || 'other'}</span>
+                              <span class="normal-case tracking-normal">
+                                {formatTimestamp(message.createTime)}
+                              </span>
+                            </div>
+                            <p class="mt-2 whitespace-pre-wrap">
+                              {message.text || '—'}
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    }}
+                  </For>
+                </div>
+              </Show>
+            </Show>
           </div>
         </section>
       </main>
@@ -449,4 +592,33 @@ function formatTimestamp(value?: number) {
   const date = new Date(value * 1000)
   if (Number.isNaN(date.getTime())) return '—'
   return dateFormat.format(date)
+}
+
+type DisplayMessage = {
+  id: string
+  authorRole?: string
+  createTime?: number
+  text: string
+}
+
+function extractMessages(conversation: Conversation): DisplayMessage[] {
+  const mappingNodes = Object.values(conversation.mapping ?? {})
+  const messages = mappingNodes
+    .map((node) => {
+      const message = node?.message
+      if (!message) return null
+      const parts = Array.isArray(message.content?.parts)
+        ? message.content?.parts ?? []
+        : []
+      const text = parts.map((part) => String(part)).join('\n').trim()
+      return {
+        id: node?.id ?? message?.create_time?.toString() ?? 'message',
+        authorRole: message.author?.role,
+        createTime: message.create_time,
+        text,
+      }
+    })
+    .filter((message): message is DisplayMessage => Boolean(message))
+
+  return messages.sort((a, b) => (a.createTime ?? 0) - (b.createTime ?? 0))
 }
