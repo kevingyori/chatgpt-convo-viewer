@@ -19,6 +19,7 @@ import {
 } from '@tanstack/react-table'
 import {
   DockviewReact,
+  DockviewDefaultTab,
   type DockviewApi,
   type DockviewReadyEvent,
   type IDockviewPanel,
@@ -95,6 +96,7 @@ type ChatPanelParams = {
   selectedMessages: DisplayMessage[]
   copied: boolean
   onCopyContext: () => void
+  onPopout: () => void
 }
 
 type SearchRecord = {
@@ -119,6 +121,7 @@ type SearchPanelParams = {
   totalMessages: number
   onQueryChange: (value: string) => void
   onSelectResult: (record: SearchRecord) => void
+  onPopout: () => void
 }
 
 const numberFormat = new Intl.NumberFormat('en-US')
@@ -393,6 +396,14 @@ function ChatPanel({
               <span className="text-cyan-300">[→]</span>
               {params.copied ? 'Copied' : 'Copy'}
             </button>
+            <button
+              type="button"
+              onClick={params.onPopout}
+              className="inline-flex items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
+            >
+              <span className="text-cyan-300">[^]</span>
+              Popout
+            </button>
           </div>
         ) : null}
       </div>
@@ -453,12 +464,22 @@ function SearchPanel({
         <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
           Full Text Search
         </div>
-        <div className="text-[10px] text-slate-500">
-          {params.status === 'building'
-            ? 'Indexing...'
-            : params.status === 'ready'
-              ? `${params.totalMessages.toLocaleString('en-US')} msgs`
-              : 'Idle'}
+        <div className="flex items-center gap-2 text-[10px] text-slate-500">
+          <button
+            type="button"
+            onClick={params.onPopout}
+            className="inline-flex items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 py-0.5 uppercase tracking-[0.2em] text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
+          >
+            <span className="text-cyan-300">[^]</span>
+            Popout
+          </button>
+          <span>
+            {params.status === 'building'
+              ? 'Indexing...'
+              : params.status === 'ready'
+                ? `${params.totalMessages.toLocaleString('en-US')} msgs`
+                : 'Idle'}
+          </span>
         </div>
       </div>
 
@@ -503,7 +524,9 @@ function SearchPanel({
                   </div>
                 </div>
                 <div className="text-slate-500 mt-1">
-                  {result.snippet || '—'}
+                  {result.snippet
+                    ? renderHighlightedSnippet(result.snippet, params.query)
+                    : '—'}
                 </div>
               </button>
             ))}
@@ -805,6 +828,10 @@ export default function App() {
       selectedMessages,
       copied,
       onCopyContext: handleCopyContext,
+      onPopout: () => {
+        if (!chatPanelRef.current || !dockviewApiRef.current) return
+        dockviewApiRef.current.addPopoutGroup(chatPanelRef.current)
+      },
     }),
     [selectedConversation, selectedMessages, copied],
   )
@@ -819,6 +846,10 @@ export default function App() {
       onSelectResult: (record) => {
         setSelectedIndex(record.conversationIndex)
         chatPanelRef.current?.api.setActive()
+      },
+      onPopout: () => {
+        if (!searchPanelRef.current || !dockviewApiRef.current) return
+        dockviewApiRef.current.addPopoutGroup(searchPanelRef.current)
       },
     }),
     [searchQuery, searchStatus, searchResults, stats.totalMessages],
@@ -895,6 +926,9 @@ export default function App() {
               className="dockview-theme-dark border border-slate-800 dockview-host__inner"
               onReady={handleDockReady}
               components={dockviewComponents}
+              defaultTabComponent={(props) => (
+                <DockviewDefaultTab {...props} hideClose />
+              )}
             />
           </div>
         </section>
@@ -953,6 +987,41 @@ function buildSnippet(text: string, query: string) {
   const prefix = start > 0 ? '…' : ''
   const suffix = end < text.length ? '…' : ''
   return `${prefix}${text.slice(start, end)}${suffix}`
+}
+
+function renderHighlightedSnippet(snippet: string, query: string) {
+  const trimmed = query.trim()
+  if (!trimmed) return snippet
+  const lowerSnippet = snippet.toLowerCase()
+  const lowerQuery = trimmed.toLowerCase()
+  const parts: Array<{ text: string; match: boolean }> = []
+
+  let index = 0
+  while (index < snippet.length) {
+    const found = lowerSnippet.indexOf(lowerQuery, index)
+    if (found === -1) {
+      parts.push({ text: snippet.slice(index), match: false })
+      break
+    }
+    if (found > index) {
+      parts.push({ text: snippet.slice(index, found), match: false })
+    }
+    parts.push({
+      text: snippet.slice(found, found + lowerQuery.length),
+      match: true,
+    })
+    index = found + lowerQuery.length
+  }
+
+  return parts.map((part, idx) =>
+    part.match ? (
+      <span key={`${part.text}-${idx}`} className="search-highlight">
+        {part.text}
+      </span>
+    ) : (
+      <span key={`${part.text}-${idx}`}>{part.text}</span>
+    ),
+  )
 }
 
 type DisplayMessage = {
