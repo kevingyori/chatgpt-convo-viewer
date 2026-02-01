@@ -97,6 +97,12 @@ type ChatPanelParams = {
   copied: boolean
   onCopyContext: () => void
   onPopout: () => void
+  chatQuery: string
+  onChatQueryChange: (value: string) => void
+  chatMatches: ChatMatch[]
+  activeChatMatchIndex: number
+  onChatPrev: () => void
+  onChatNext: () => void
 }
 
 type SearchRecord = {
@@ -112,6 +118,12 @@ type SearchRecord = {
 type SearchResult = {
   record: SearchRecord
   snippet: string
+}
+
+type ChatMatch = {
+  messageId: string
+  start: number
+  end: number
 }
 
 type SearchPanelParams = {
@@ -391,7 +403,7 @@ function ChatPanel({
             <button
               type="button"
               onClick={params.onCopyContext}
-              className="inline-flex items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
+              className="interactive inline-flex items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
             >
               <span className="text-cyan-300">[→]</span>
               {params.copied ? 'Copied' : 'Copy'}
@@ -399,13 +411,46 @@ function ChatPanel({
             <button
               type="button"
               onClick={params.onPopout}
-              className="inline-flex items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
+              className="interactive inline-flex items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
             >
               <span className="text-cyan-300">[^]</span>
               Popout
             </button>
           </div>
         ) : null}
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span className="text-slate-500">[?]</span>
+        <input
+          value={params.chatQuery}
+          onChange={(event) => params.onChatQueryChange(event.target.value)}
+          placeholder="Search this chat"
+          className="interactive w-full border border-slate-800 bg-slate-950/80 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/70"
+        />
+        <div className="flex items-center gap-1 text-[10px] text-slate-500 whitespace-nowrap">
+          <button
+            type="button"
+            onClick={params.onChatPrev}
+            className="interactive inline-flex items-center border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
+            disabled={params.chatMatches.length === 0}
+          >
+            {'[<]'}
+          </button>
+          <button
+            type="button"
+            onClick={params.onChatNext}
+            className="interactive inline-flex items-center border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
+            disabled={params.chatMatches.length === 0}
+          >
+            {'[>]'}
+          </button>
+          <span className="text-slate-500">
+            {params.chatMatches.length === 0
+              ? '0/0'
+              : `${params.activeChatMatchIndex + 1}/${params.chatMatches.length}`}
+          </span>
+        </div>
       </div>
 
       <div className="flex-1 border border-slate-800 bg-slate-950/50 p-2 overflow-auto">
@@ -423,6 +468,13 @@ function ChatPanel({
               const role = message.authorRole
               const isUser = role === 'user'
               const isAssistant = role === 'assistant'
+              const matches = params.chatMatches.filter(
+                (match) => match.messageId === message.id,
+              )
+              const activeMatch =
+                params.activeChatMatchIndex >= 0
+                  ? params.chatMatches[params.activeChatMatchIndex]
+                  : null
               return (
                 <div
                   key={message.id}
@@ -433,12 +485,19 @@ function ChatPanel({
                         ? 'text-slate-200'
                         : 'text-slate-400'
                   }`}
+                  data-chat-message-id={message.id}
                 >
                   <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 truncate pr-1">
                     {role || 'other'}
                   </div>
                   <div className="leading-relaxed whitespace-pre-wrap">
-                    {message.text || '—'}
+                    {renderChatHighlights(
+                      message.text || '—',
+                      matches,
+                      activeMatch?.messageId === message.id
+                        ? activeMatch
+                        : null,
+                    )}
                     <span className="block text-[10px] text-slate-600 mt-1">
                       {formatTimestamp(message.createTime)}
                     </span>
@@ -555,6 +614,9 @@ export default function App() {
   const [searchStatus, setSearchStatus] = useState<
     'idle' | 'building' | 'ready'
   >('idle')
+  const [chatQuery, setChatQuery] = useState('')
+  const [chatMatches, setChatMatches] = useState<ChatMatch[]>([])
+  const [activeChatMatchIndex, setActiveChatMatchIndex] = useState(-1)
 
   const dockviewApiRef = useRef<DockviewApi | null>(null)
   const conversationsPanelRef = useRef<IDockviewPanel | null>(null)
@@ -682,6 +744,43 @@ export default function App() {
     if (!selectedConversation) return []
     return extractMessages(selectedConversation)
   }, [selectedConversation])
+
+  useEffect(() => {
+    const query = chatQuery.trim().toLowerCase()
+    if (!query) {
+      setChatMatches([])
+      setActiveChatMatchIndex(-1)
+      return
+    }
+
+    const matches: ChatMatch[] = []
+    for (const message of selectedMessages) {
+      const haystack = message.text.toLowerCase()
+      let index = 0
+      while (index < haystack.length) {
+        const found = haystack.indexOf(query, index)
+        if (found === -1) break
+        matches.push({
+          messageId: message.id,
+          start: found,
+          end: found + query.length,
+        })
+        index = found + query.length
+      }
+    }
+    setChatMatches(matches)
+    setActiveChatMatchIndex(matches.length > 0 ? 0 : -1)
+  }, [chatQuery, selectedMessages])
+
+  useEffect(() => {
+    if (activeChatMatchIndex < 0) return
+    const match = chatMatches[activeChatMatchIndex]
+    if (!match) return
+    const el = document.querySelector(`[data-chat-message-id="${match.messageId}"]`)
+    if (el instanceof HTMLElement) {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }
+  }, [activeChatMatchIndex, chatMatches])
 
   useEffect(() => {
     const query = searchQuery.trim()
@@ -832,8 +931,31 @@ export default function App() {
         if (!chatPanelRef.current || !dockviewApiRef.current) return
         dockviewApiRef.current.addPopoutGroup(chatPanelRef.current)
       },
+      chatQuery,
+      onChatQueryChange: setChatQuery,
+      chatMatches,
+      activeChatMatchIndex,
+      onChatPrev: () => {
+        if (chatMatches.length === 0) return
+        setActiveChatMatchIndex((current) =>
+          current <= 0 ? chatMatches.length - 1 : current - 1,
+        )
+      },
+      onChatNext: () => {
+        if (chatMatches.length === 0) return
+        setActiveChatMatchIndex((current) =>
+          current >= chatMatches.length - 1 ? 0 : current + 1,
+        )
+      },
     }),
-    [selectedConversation, selectedMessages, copied],
+    [
+      selectedConversation,
+      selectedMessages,
+      copied,
+      chatQuery,
+      chatMatches,
+      activeChatMatchIndex,
+    ],
   )
 
   const searchParams = useMemo<SearchPanelParams>(
@@ -1016,6 +1138,47 @@ function renderHighlightedSnippet(snippet: string, query: string) {
   return parts.map((part, idx) =>
     part.match ? (
       <span key={`${part.text}-${idx}`} className="search-highlight">
+        {part.text}
+      </span>
+    ) : (
+      <span key={`${part.text}-${idx}`}>{part.text}</span>
+    ),
+  )
+}
+
+function renderChatHighlights(
+  text: string,
+  matches: ChatMatch[],
+  activeMatch: ChatMatch | null,
+) {
+  if (matches.length === 0) return text
+
+  const parts: Array<{ text: string; match: boolean; active: boolean }> = []
+  let cursor = 0
+  for (const match of matches) {
+    if (match.start > cursor) {
+      parts.push({ text: text.slice(cursor, match.start), match: false, active: false })
+    }
+    const isActive =
+      activeMatch?.messageId === match.messageId &&
+      activeMatch?.start === match.start
+    parts.push({
+      text: text.slice(match.start, match.end),
+      match: true,
+      active: isActive,
+    })
+    cursor = match.end
+  }
+  if (cursor < text.length) {
+    parts.push({ text: text.slice(cursor), match: false, active: false })
+  }
+
+  return parts.map((part, idx) =>
+    part.match ? (
+      <span
+        key={`${part.text}-${idx}`}
+        className={part.active ? 'chat-highlight-active' : 'chat-highlight'}
+      >
         {part.text}
       </span>
     ) : (

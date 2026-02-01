@@ -30,3 +30,15 @@ code {
   background: rgba(34, 211, 238, 0.18);
   padding: 0 2px;
 }
+
+.chat-highlight {
+  color: #e2e8f0;
+  background: rgba(14, 165, 233, 0.18);
+  padding: 0 2px;
+}
+
+.chat-highlight-active {
+  color: #0b1120;
+  background: rgba(34, 211, 238, 0.9);
+  padding: 0 2px;
+}
