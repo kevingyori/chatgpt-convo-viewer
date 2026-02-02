@@ -220,6 +220,7 @@ function ConversationsPanel({
   params,
 }: IDockviewPanelProps<ConversationsPanelParams>) {
   const inputRef = useRef<HTMLInputElement | null>(null)
+  const [isHelpOpen, setIsHelpOpen] = useState(false)
   if (!params) return null
 
   const dragClass = params.isDragging
@@ -263,6 +264,32 @@ function ConversationsPanel({
             <span className="text-cyan-300">[+]</span>
             <span>Load file</span>
           </button>
+          <div className="relative">
+            <button
+              type="button"
+              aria-label="How to export conversations"
+              aria-expanded={isHelpOpen}
+              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-700 bg-slate-950 text-[11px] text-cyan-300 hover:border-cyan-400/70"
+              onClick={() => setIsHelpOpen((open) => !open)}
+            >
+              ?
+            </button>
+            {isHelpOpen ? (
+              <div className="absolute left-0 top-8 z-10 w-72 rounded border border-slate-700 bg-slate-950/95 p-3 text-[11px] text-slate-200 shadow-lg">
+                <div className="font-semibold text-cyan-200">
+                  Export steps
+                </div>
+                <ol className="mt-2 list-decimal space-y-1 pl-4 text-slate-300">
+                  <li>ChatGPT Settings &gt; Data controls</li>
+                  <li>Export data</li>
+                  <li>Confirm export</li>
+                  <li>Download from email</li>
+                  <li>Unzip the download</li>
+                  <li>Upload conversations.json from the unzipped folder</li>
+                </ol>
+              </div>
+            ) : null}
+          </div>
           <input
             ref={inputRef}
             className="sr-only"
