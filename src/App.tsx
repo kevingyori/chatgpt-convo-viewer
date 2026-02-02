@@ -85,7 +85,7 @@ type ConversationsPanelParams = {
   setSorting: (value: SortingState) => void
   setIsDragging: (value: boolean) => void
   onFileChange: (event: ChangeEvent<HTMLInputElement>) => void
-  onDrop: (event: DragEvent<HTMLButtonElement>) => void
+  onDrop: (event: DragEvent<HTMLDivElement>) => void
   onClear: () => void
   onSelectRow: (index: number) => void
   selectedIndex: number | null
@@ -223,6 +223,22 @@ function ConversationsPanel({
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   if (!params) return null
 
+  const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    params.setIsDragging(true)
+  }
+
+  const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    params.setIsDragging(true)
+  }
+
+  const handleDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    if (event.currentTarget === event.target) {
+      params.setIsDragging(false)
+    }
+  }
+
   const dragClass = params.isDragging
     ? ' border-cyan-400/80 bg-cyan-500/10'
     : ''
@@ -243,23 +259,19 @@ function ConversationsPanel({
   })
 
   return (
-    <div className="h-full flex flex-col gap-2 p-2">
+    <div
+      className="h-full flex flex-col gap-2 p-2 sm:p-3"
+      onDragEnter={handleDragEnter}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={params.onDrop}
+    >
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
         <div className="flex items-center gap-3">
           <button
             type="button"
-            className={`inline-flex items-center gap-2 border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300 cursor-pointer hover:border-cyan-400/70${dragClass}`}
+            className={`inline-flex items-center gap-2 border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300 cursor-pointer select-none hover:border-cyan-400/70${dragClass}`}
             onClick={() => inputRef.current?.click()}
-            onDragEnter={(event) => {
-              event.preventDefault()
-              params.setIsDragging(true)
-            }}
-            onDragOver={(event) => {
-              event.preventDefault()
-              params.setIsDragging(true)
-            }}
-            onDragLeave={() => params.setIsDragging(false)}
-            onDrop={params.onDrop}
           >
             <span className="text-cyan-300">[+]</span>
             <span>Load file</span>
@@ -420,7 +432,7 @@ function ChatPanel({
   if (!params) return null
 
   return (
-    <div className="h-full flex flex-col gap-2 p-2">
+    <div className="h-full flex flex-col gap-2 p-2 sm:p-3">
       <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
         <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 truncate">
           {params.selectedConversation?.title || 'Chat'}
@@ -545,7 +557,7 @@ function SearchPanel({
   if (!params) return null
 
   return (
-    <div className="h-full flex flex-col gap-2 p-2">
+    <div className="h-full flex flex-col gap-2 p-2 sm:p-3">
       <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
         <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
           Full Text Search
@@ -900,7 +912,7 @@ export default function App() {
     }
   }
 
-  const handleDrop = (event: DragEvent<HTMLButtonElement>) => {
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     setIsDragging(false)
     const file = event.dataTransfer?.files?.[0]
@@ -1060,10 +1072,136 @@ export default function App() {
     [],
   )
 
+  useEffect(() => {
+    if (!dockReady) return
+    const root = document.querySelector('.dockview-host')
+    if (!root || !('ontouchstart' in window)) return
+
+    let dragTab: HTMLElement | null = null
+    let dragTarget: Element | null = null
+    let dragData: DataTransfer | null = null
+    let startX = 0
+    let startY = 0
+    let dragging = false
+
+    const resetDrag = () => {
+      dragTab = null
+      dragTarget = null
+      dragData = null
+      dragging = false
+      startX = 0
+      startY = 0
+    }
+
+    const createDataTransfer = () => {
+      try {
+        return new DataTransfer()
+      } catch {
+        return null
+      }
+    }
+
+    const createDragEvent = (type: string, event: PointerEvent) => {
+      const dataTransfer = dragData
+      try {
+        return new DragEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          dataTransfer,
+          clientX: event.clientX,
+          clientY: event.clientY,
+        })
+      } catch {
+        const fallbackEvent = new Event(type, {
+          bubbles: true,
+          cancelable: true,
+        }) as DragEvent
+        Object.defineProperty(fallbackEvent, 'dataTransfer', {
+          value: dataTransfer,
+        })
+        Object.defineProperty(fallbackEvent, 'clientX', {
+          value: event.clientX,
+        })
+        Object.defineProperty(fallbackEvent, 'clientY', {
+          value: event.clientY,
+        })
+        return fallbackEvent
+      }
+    }
+
+    const startDrag = (event: PointerEvent) => {
+      if (!dragTab) return
+      dragData = createDataTransfer()
+      const dragStartEvent = createDragEvent('dragstart', event)
+      dragTab.dispatchEvent(dragStartEvent)
+      dragging = !dragStartEvent.defaultPrevented
+      if (!dragging) {
+        resetDrag()
+      }
+    }
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.pointerType !== 'touch') return
+      const target = event.target as Element | null
+      const tab = target?.closest('.dv-tab')
+      if (!tab) return
+      dragTab = tab as HTMLElement
+      startX = event.clientX
+      startY = event.clientY
+    }
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!dragTab) return
+      const deltaX = Math.abs(event.clientX - startX)
+      const deltaY = Math.abs(event.clientY - startY)
+      const threshold = 6
+      if (!dragging) {
+        if (deltaX < threshold && deltaY < threshold) return
+        startDrag(event)
+      }
+      if (!dragging) return
+      event.preventDefault()
+      const target = document.elementFromPoint(event.clientX, event.clientY)
+      if (!target) return
+      if (dragTarget && dragTarget !== target) {
+        dragTarget.dispatchEvent(createDragEvent('dragleave', event))
+      }
+      if (dragTarget !== target) {
+        target.dispatchEvent(createDragEvent('dragenter', event))
+        dragTarget = target
+      }
+      target.dispatchEvent(createDragEvent('dragover', event))
+    }
+
+    const endDrag = (event: PointerEvent) => {
+      if (!dragTab) return
+      if (dragging) {
+        event.preventDefault()
+        if (dragTarget) {
+          dragTarget.dispatchEvent(createDragEvent('drop', event))
+        }
+        dragTab.dispatchEvent(createDragEvent('dragend', event))
+      }
+      resetDrag()
+    }
+
+    root.addEventListener('pointerdown', handlePointerDown, { passive: true })
+    root.addEventListener('pointermove', handlePointerMove, { passive: false })
+    root.addEventListener('pointerup', endDrag, { passive: false })
+    root.addEventListener('pointercancel', endDrag, { passive: false })
+
+    return () => {
+      root.removeEventListener('pointerdown', handlePointerDown)
+      root.removeEventListener('pointermove', handlePointerMove)
+      root.removeEventListener('pointerup', endDrag)
+      root.removeEventListener('pointercancel', endDrag)
+    }
+  }, [dockReady])
+
   return (
     <div className="min-h-screen bg-[#0a0c0f] text-slate-100">
-      <main className="mx-auto px-3 py-4 h-full">
-        <section className="flex flex-wrap items-center gap-3 text-[11px] uppercase tracking-[0.25em] text-slate-500">
+      <main className="mx-auto px-3 py-4 sm:px-4 sm:py-5 h-full">
+        <section className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-[11px] uppercase tracking-[0.25em] text-slate-500">
           <span className="text-slate-300 font-semibold">CHATGPT EXPORT</span>
           <span className="text-slate-500">/</span>
           <span className="text-slate-400">CONVERSATIONS.JSON VIEWER</span>

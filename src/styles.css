@@ -25,6 +25,13 @@ code {
   width: 100%;
 }
 
+.dockview-host .dv-tab,
+.dockview-host .dv-tab * {
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+
 .search-highlight {
   color: #e2e8f0;
   background: rgba(34, 211, 238, 0.18);
