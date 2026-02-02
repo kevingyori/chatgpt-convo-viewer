@@ -13,4 +13,5 @@
 ## UI Components
 - Prefer small, reusable UI components for toolbar controls instead of repeating long class strings.
 - Keep component APIs minimal (className overrides, common base classes) to enforce consistent sizing.
+- Use provider-driven compound components (context + composition) for buttons, rows, and inputs.
 </INSTRUCTIONS>

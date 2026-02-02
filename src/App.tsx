@@ -1,10 +1,16 @@
 import {
+  createContext,
   useEffect,
   useMemo,
   useRef,
   useState,
+  useContext,
   type ChangeEvent,
   type DragEvent,
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
 } from 'react'
 import FlexSearch from 'flexsearch'
 import {
@@ -26,30 +32,175 @@ import {
   type IDockviewPanelProps,
 } from 'dockview'
 
-type ToolbarButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement>
+type ToolbarContextValue = {
+  rowClass: string
+  buttonClass: string
+  iconButtonClass: string
+  inputClass: string
+  textClass: string
+}
+
+const ToolbarContext = createContext<ToolbarContextValue | null>(null)
+
+function useToolbarContext() {
+  const context = useContext(ToolbarContext)
+  if (!context) {
+    throw new Error('Toolbar components must be used within <Toolbar>.')
+  }
+  return context
+}
+
+type ToolbarProps = {
+  children: ReactNode
+  className?: string
+  rowClass?: string
+  buttonClass?: string
+  iconButtonClass?: string
+  inputClass?: string
+  textClass?: string
+}
+
+type ToolbarRowProps = HTMLAttributes<HTMLDivElement>
+type ToolbarButtonProps = ButtonHTMLAttributes<HTMLButtonElement>
+type ToolbarInputProps = InputHTMLAttributes<HTMLInputElement>
+type ToolbarTextProps = HTMLAttributes<HTMLSpanElement>
+
+function ToolbarRoot({
+  children,
+  className,
+  rowClass = 'flex items-center gap-3 h-7',
+  buttonClass = 'inline-flex h-full items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-cyan-400/70',
+  iconButtonClass = 'inline-flex h-full w-6 items-center justify-center border border-slate-700 bg-slate-950 text-[11px] text-cyan-300 hover:border-cyan-400/70',
+  inputClass = 'border border-slate-800 bg-slate-950/80 px-2 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/70',
+  textClass = 'text-[11px] text-slate-500',
+}: ToolbarProps) {
+  const value = {
+    rowClass,
+    buttonClass,
+    iconButtonClass,
+    inputClass,
+    textClass,
+  }
+  return (
+    <ToolbarContext.Provider value={value}>
+      <div className={className}>{children}</div>
+    </ToolbarContext.Provider>
+  )
+}
+
+function ToolbarRow({ className, ...props }: ToolbarRowProps) {
+  const { rowClass } = useToolbarContext()
+  return (
+    <div
+      {...props}
+      className={className ? `${rowClass} ${className}` : rowClass}
+    />
+  )
+}
 
 function ToolbarButton({ className, ...props }: ToolbarButtonProps) {
-  const base =
-    'inline-flex h-full items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-cyan-400/70'
+  const { buttonClass } = useToolbarContext()
   return (
     <button
       {...props}
       type={props.type ?? 'button'}
-      className={className ? `${base} ${className}` : base}
+      className={className ? `${buttonClass} ${className}` : buttonClass}
     />
   )
 }
 
 function ToolbarIconButton({ className, ...props }: ToolbarButtonProps) {
-  const base =
-    'inline-flex h-full w-6 items-center justify-center border border-slate-700 bg-slate-950 text-[11px] text-cyan-300 hover:border-cyan-400/70'
+  const { iconButtonClass } = useToolbarContext()
   return (
     <button
       {...props}
       type={props.type ?? 'button'}
-      className={className ? `${base} ${className}` : base}
+      className={className ? `${iconButtonClass} ${className}` : iconButtonClass}
     />
   )
+}
+
+function ToolbarInput({ className, ...props }: ToolbarInputProps) {
+  const { inputClass } = useToolbarContext()
+  return (
+    <input
+      {...props}
+      className={className ? `${inputClass} ${className}` : inputClass}
+    />
+  )
+}
+
+function ToolbarText({ className, ...props }: ToolbarTextProps) {
+  const { textClass } = useToolbarContext()
+  return (
+    <span
+      {...props}
+      className={className ? `${textClass} ${className}` : textClass}
+    />
+  )
+}
+
+const Toolbar = Object.assign(ToolbarRoot, {
+  Row: ToolbarRow,
+  Button: ToolbarButton,
+  IconButton: ToolbarIconButton,
+  Input: ToolbarInput,
+  Text: ToolbarText,
+})
+
+type ListContextValue = {
+  itemButtonClass: string
+}
+
+const ListContext = createContext<ListContextValue | null>(null)
+
+function useListContext() {
+  const context = useContext(ListContext)
+  if (!context) {
+    throw new Error('List components must be used within <List>.')
+  }
+  return context
+}
+
+type ListProps = {
+  children: ReactNode
+  className?: string
+  itemButtonClass?: string
+}
+
+type ListButtonProps = ButtonHTMLAttributes<HTMLButtonElement>
+
+function ListRoot({
+  children,
+  className,
+  itemButtonClass = 'w-full text-left px-3 py-2 text-[11px] text-slate-200 hover:bg-slate-900/60 transition',
+}: ListProps) {
+  return (
+    <ListContext.Provider value={{ itemButtonClass }}>
+      <div className={className}>{children}</div>
+    </ListContext.Provider>
+  )
+}
+
+function ListButton({ className, ...props }: ListButtonProps) {
+  const { itemButtonClass } = useListContext()
+  return (
+    <button
+      {...props}
+      type={props.type ?? 'button'}
+      className={className ? `${itemButtonClass} ${className}` : itemButtonClass}
+    />
+  )
+}
+
+const List = Object.assign(ListRoot, {
+  Button: ListButton,
+})
+
+type HiddenInputProps = InputHTMLAttributes<HTMLInputElement>
+
+function HiddenInput({ className, ...props }: HiddenInputProps) {
+  return <input {...props} className={className ?? 'sr-only'} />
 }
 
 type Conversation = {
@@ -249,7 +400,6 @@ function ConversationsPanel({
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const helpRef = useRef<HTMLDivElement | null>(null)
   if (!params) return null
-  const toolbarRowClass = 'flex items-center gap-3 h-7'
 
   const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -305,29 +455,29 @@ function ConversationsPanel({
 
   return (
     <div
-      className="h-full flex flex-col gap-2 p-2 sm:p-3"
+      className="h-full flex flex-col gap-2 p-2"
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={params.onDrop}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-        <div className={toolbarRowClass}>
-          <ToolbarButton
+      <Toolbar className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+        <Toolbar.Row>
+          <Toolbar.Button
             className={`cursor-pointer${dragClass}`}
             onClick={() => inputRef.current?.click()}
           >
             <span className="text-cyan-300">[+]</span>
             <span>Load file</span>
-          </ToolbarButton>
+          </Toolbar.Button>
           <div className="relative" ref={helpRef}>
-            <ToolbarIconButton
+            <Toolbar.IconButton
               aria-label="How to export conversations"
               aria-expanded={isHelpOpen}
               onClick={() => setIsHelpOpen((open) => !open)}
             >
               ?
-            </ToolbarIconButton>
+            </Toolbar.IconButton>
             {isHelpOpen ? (
               <div className="absolute left-0 top-8 z-10 w-72 border border-slate-700 bg-slate-950/95 p-3 text-[11px] text-slate-200 shadow-lg">
                 <div className="font-semibold text-cyan-200">
@@ -344,31 +494,28 @@ function ConversationsPanel({
               </div>
             ) : null}
           </div>
-          <input
+          <HiddenInput
             ref={inputRef}
-            className="sr-only"
             type="file"
             accept=".json,application/json"
             onChange={params.onFileChange}
           />
-          <span className="text-[11px] text-slate-500">
-            {params.fileName ?? 'No file loaded'}
-          </span>
+          <Toolbar.Text>{params.fileName ?? 'No file loaded'}</Toolbar.Text>
           {params.loading ? (
-            <span className="text-cyan-300 text-[11px]">Parsing…</span>
+            <Toolbar.Text className="text-cyan-300">Parsing…</Toolbar.Text>
           ) : null}
           {params.error ? (
-            <span className="text-rose-300 text-[11px]">{params.error}</span>
+            <Toolbar.Text className="text-rose-300">{params.error}</Toolbar.Text>
           ) : null}
-        </div>
-        <div className={toolbarRowClass}>
-          <ToolbarButton
+        </Toolbar.Row>
+        <Toolbar.Row>
+          <Toolbar.Button
             onClick={params.onClear}
             className="gap-2 hover:border-rose-400/70 hover:text-white transition"
           >
             <span className="text-rose-300">[x]</span> Clear
-          </ToolbarButton>
-          <div className="text-[11px] text-slate-500">
+          </Toolbar.Button>
+          <Toolbar.Text>
             Total:{' '}
             <span className="text-slate-200">
               {numberFormat.format(params.stats.total)}
@@ -381,19 +528,21 @@ function ConversationsPanel({
             <span className="text-slate-200">
               {numberFormat.format(params.stats.archived)}
             </span>
-          </div>
-        </div>
-      </div>
+          </Toolbar.Text>
+        </Toolbar.Row>
+      </Toolbar>
 
-      <div className="flex items-center gap-2">
-        <span className="text-slate-500">[?]</span>
-        <input
-          value={params.globalFilter}
-          onChange={(event) => params.setGlobalFilter(event.target.value)}
-          placeholder="Filter conversations"
-          className="w-full border border-slate-800 bg-slate-950/80 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/70"
-        />
-      </div>
+      <Toolbar className="flex items-center gap-2" rowClass="flex items-center gap-2 h-7">
+        <Toolbar.Row className="w-full">
+          <span className="text-slate-500">[?]</span>
+          <Toolbar.Input
+            value={params.globalFilter}
+            onChange={(event) => params.setGlobalFilter(event.target.value)}
+            placeholder="Filter conversations"
+            className="w-full py-1"
+          />
+        </Toolbar.Row>
+      </Toolbar>
 
       <div className="flex-1 border border-slate-800 bg-slate-950/50 overflow-hidden">
         <div className="overflow-auto h-full">
@@ -473,65 +622,68 @@ function ChatPanel({
   if (!params) return null
 
   return (
-    <div className="h-full flex flex-col gap-2 p-2 sm:p-3">
-      <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
-        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500 truncate">
-          {params.selectedConversation?.title || 'Chat'}
-        </div>
+    <div className="h-full flex flex-col gap-2 p-2">
+      <Toolbar
+        className="flex items-center justify-between gap-2 text-[11px] text-slate-500"
+        rowClass="flex items-center gap-2 h-7"
+      >
+        <Toolbar.Row className="min-w-0">
+          <Toolbar.Text className="text-[10px] uppercase tracking-[0.2em] truncate">
+            {params.selectedConversation?.title || 'Chat'}
+          </Toolbar.Text>
+        </Toolbar.Row>
         {params.selectedConversation ? (
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
+          <Toolbar.Row>
+            <Toolbar.Button
               onClick={params.onCopyContext}
-              className="interactive inline-flex items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
+              className="interactive hover:border-cyan-400/70 hover:text-white transition"
             >
               <span className="text-cyan-300">[→]</span>
               {params.copied ? 'Copied' : 'Copy'}
-            </button>
-            <button
-              type="button"
+            </Toolbar.Button>
+            <Toolbar.Button
               onClick={params.onPopout}
-              className="interactive inline-flex items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 py-0.5 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
+              className="interactive hover:border-cyan-400/70 hover:text-white transition"
             >
               <span className="text-cyan-300">[^]</span>
               Popout
-            </button>
-          </div>
+            </Toolbar.Button>
+          </Toolbar.Row>
         ) : null}
-      </div>
+      </Toolbar>
 
-      <div className="flex items-center gap-2">
-        <span className="text-slate-500">[?]</span>
-        <input
-          value={params.chatQuery}
-          onChange={(event) => params.onChatQueryChange(event.target.value)}
-          placeholder="Search this chat"
-          className="interactive w-full border border-slate-800 bg-slate-950/80 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/70"
-        />
-        <div className="flex items-center gap-1 text-[10px] text-slate-500 whitespace-nowrap">
-          <button
-            type="button"
-            onClick={params.onChatPrev}
-            className="interactive inline-flex items-center border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
-            disabled={params.chatMatches.length === 0}
-          >
-            {'[<]'}
-          </button>
-          <button
-            type="button"
-            onClick={params.onChatNext}
-            className="interactive inline-flex items-center border border-slate-700 bg-slate-950 px-1.5 py-0.5 text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
-            disabled={params.chatMatches.length === 0}
-          >
-            {'[>]'}
-          </button>
-          <span className="text-slate-500">
-            {params.chatMatches.length === 0
-              ? '0/0'
-              : `${params.activeChatMatchIndex + 1}/${params.chatMatches.length}`}
-          </span>
-        </div>
-      </div>
+      <Toolbar className="flex items-center gap-2" rowClass="flex items-center gap-2 h-7">
+        <Toolbar.Row className="w-full">
+          <span className="text-slate-500">[?]</span>
+          <Toolbar.Input
+            value={params.chatQuery}
+            onChange={(event) => params.onChatQueryChange(event.target.value)}
+            placeholder="Search this chat"
+            className="interactive w-full py-1"
+          />
+          <div className="flex items-center gap-1 text-[10px] text-slate-500 whitespace-nowrap">
+            <Toolbar.Button
+              onClick={params.onChatPrev}
+              className="interactive px-1.5 tracking-normal hover:border-cyan-400/70 hover:text-white transition"
+              disabled={params.chatMatches.length === 0}
+            >
+              {'[<]'}
+            </Toolbar.Button>
+            <Toolbar.Button
+              onClick={params.onChatNext}
+              className="interactive px-1.5 tracking-normal hover:border-cyan-400/70 hover:text-white transition"
+              disabled={params.chatMatches.length === 0}
+            >
+              {'[>]'}
+            </Toolbar.Button>
+            <span className="text-slate-500">
+              {params.chatMatches.length === 0
+                ? '0/0'
+                : `${params.activeChatMatchIndex + 1}/${params.chatMatches.length}`}
+            </span>
+          </div>
+        </Toolbar.Row>
+      </Toolbar>
 
       <div className="flex-1 border border-slate-800 bg-slate-950/50 p-2 overflow-auto">
         {!params.selectedConversation ? (
@@ -598,20 +750,24 @@ function SearchPanel({
   if (!params) return null
 
   return (
-    <div className="h-full flex flex-col gap-2 p-2 sm:p-3">
-      <div className="flex items-center justify-between gap-2 text-[11px] text-slate-500">
-        <div className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
-          Full Text Search
-        </div>
-        <div className="flex items-center gap-2 text-[10px] text-slate-500">
-          <button
-            type="button"
+    <div className="h-full flex flex-col gap-2 p-2">
+      <Toolbar
+        className="flex items-center justify-between gap-2 text-[11px] text-slate-500"
+        rowClass="flex items-center gap-2 h-7"
+      >
+        <Toolbar.Row>
+          <Toolbar.Text className="text-[10px] uppercase tracking-[0.2em] text-slate-500">
+            Full Text Search
+          </Toolbar.Text>
+        </Toolbar.Row>
+        <Toolbar.Row className="text-[10px] text-slate-500">
+          <Toolbar.Button
             onClick={params.onPopout}
-            className="inline-flex items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 py-0.5 uppercase tracking-[0.2em] text-slate-300 hover:border-cyan-400/70 hover:text-white transition"
+            className="hover:border-cyan-400/70 hover:text-white transition"
           >
             <span className="text-cyan-300">[^]</span>
             Popout
-          </button>
+          </Toolbar.Button>
           <span>
             {params.status === 'building'
               ? 'Indexing...'
@@ -619,18 +775,20 @@ function SearchPanel({
                 ? `${params.totalMessages.toLocaleString('en-US')} msgs`
                 : 'Idle'}
           </span>
-        </div>
-      </div>
+        </Toolbar.Row>
+      </Toolbar>
 
-      <div className="flex items-center gap-2">
-        <span className="text-slate-500">[?]</span>
-        <input
-          value={params.query}
-          onChange={(event) => params.onQueryChange(event.target.value)}
-          placeholder="Search all messages"
-          className="w-full border border-slate-800 bg-slate-950/80 px-2 py-1 text-xs text-slate-200 placeholder:text-slate-600 focus:outline-none focus:border-cyan-400/70"
-        />
-      </div>
+      <Toolbar className="flex items-center gap-2" rowClass="flex items-center gap-2 h-7">
+        <Toolbar.Row className="w-full">
+          <span className="text-slate-500">[?]</span>
+          <Toolbar.Input
+            value={params.query}
+            onChange={(event) => params.onQueryChange(event.target.value)}
+            placeholder="Search all messages"
+            className="w-full py-1"
+          />
+        </Toolbar.Row>
+      </Toolbar>
 
       <div className="flex-1 border border-slate-800 bg-slate-950/50 overflow-auto">
         {params.query.trim().length === 0 ? (
@@ -646,13 +804,11 @@ function SearchPanel({
             No matches found.
           </div>
         ) : (
-          <div className="divide-y divide-slate-900/80">
+          <List className="divide-y divide-slate-900/80">
             {params.results.map((result) => (
-              <button
+              <List.Button
                 key={result.record.id}
-                type="button"
                 onClick={() => params.onSelectResult(result.record)}
-                className="w-full text-left px-3 py-2 text-[11px] text-slate-200 hover:bg-slate-900/60 transition"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="text-slate-400 truncate">
@@ -667,9 +823,9 @@ function SearchPanel({
                     ? renderHighlightedSnippet(result.snippet, params.query)
                     : '—'}
                 </div>
-              </button>
+              </List.Button>
             ))}
-          </div>
+          </List>
         )}
       </div>
     </div>
