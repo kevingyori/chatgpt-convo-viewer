@@ -8,11 +8,15 @@ import {
 } from 'react'
 
 type ToolbarContextValue = {
-  rowClass: string
-  buttonClass: string
-  iconButtonClass: string
-  inputClass: string
-  textClass: string
+  state: {}
+  actions: {}
+  meta: {
+    rowClass: string
+    buttonClass: string
+    iconButtonClass: string
+    inputClass: string
+    textClass: string
+  }
 }
 
 const ToolbarContext = createContext<ToolbarContextValue | null>(null)
@@ -53,11 +57,15 @@ function ToolbarRoot({
   textClass = 'text-[11px] text-slate-500',
 }: ToolbarProps) {
   const value = {
-    rowClass,
-    buttonClass,
-    iconButtonClass,
-    inputClass,
-    textClass,
+    state: {},
+    actions: {},
+    meta: {
+      rowClass,
+      buttonClass,
+      iconButtonClass,
+      inputClass,
+      textClass,
+    },
   }
   return (
     <ToolbarContext.Provider value={value}>
@@ -67,7 +75,9 @@ function ToolbarRoot({
 }
 
 function ToolbarRow({ className, ...props }: ToolbarRowProps) {
-  const { rowClass } = useToolbarContext()
+  const {
+    meta: { rowClass },
+  } = useToolbarContext()
   return (
     <div
       {...props}
@@ -77,7 +87,9 @@ function ToolbarRow({ className, ...props }: ToolbarRowProps) {
 }
 
 function ToolbarButton({ className, ...props }: ToolbarButtonProps) {
-  const { buttonClass } = useToolbarContext()
+  const {
+    meta: { buttonClass },
+  } = useToolbarContext()
   return (
     <button
       {...props}
@@ -88,7 +100,9 @@ function ToolbarButton({ className, ...props }: ToolbarButtonProps) {
 }
 
 function ToolbarIconButton({ className, ...props }: ToolbarButtonProps) {
-  const { iconButtonClass } = useToolbarContext()
+  const {
+    meta: { iconButtonClass },
+  } = useToolbarContext()
   return (
     <button
       {...props}
@@ -99,7 +113,9 @@ function ToolbarIconButton({ className, ...props }: ToolbarButtonProps) {
 }
 
 function ToolbarInput({ className, ...props }: ToolbarInputProps) {
-  const { inputClass } = useToolbarContext()
+  const {
+    meta: { inputClass },
+  } = useToolbarContext()
   return (
     <input
       {...props}
@@ -109,7 +125,9 @@ function ToolbarInput({ className, ...props }: ToolbarInputProps) {
 }
 
 function ToolbarText({ className, ...props }: ToolbarTextProps) {
-  const { textClass } = useToolbarContext()
+  const {
+    meta: { textClass },
+  } = useToolbarContext()
   return (
     <span
       {...props}

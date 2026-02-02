@@ -6,7 +6,11 @@ import {
 } from 'react'
 
 type ListContextValue = {
-  itemButtonClass: string
+  state: {}
+  actions: {}
+  meta: {
+    itemButtonClass: string
+  }
 }
 
 const ListContext = createContext<ListContextValue | null>(null)
@@ -34,14 +38,16 @@ function ListRoot({
     'w-full text-left px-3 py-2 text-[11px] text-slate-200 hover:bg-slate-900/60 transition',
 }: ListProps) {
   return (
-    <ListContext.Provider value={{ itemButtonClass }}>
+    <ListContext.Provider value={{ state: {}, actions: {}, meta: { itemButtonClass } }}>
       <div className={className}>{children}</div>
     </ListContext.Provider>
   )
 }
 
 function ListButton({ className, ...props }: ListButtonProps) {
-  const { itemButtonClass } = useListContext()
+  const {
+    meta: { itemButtonClass },
+  } = useListContext()
   return (
     <button
       {...props}
