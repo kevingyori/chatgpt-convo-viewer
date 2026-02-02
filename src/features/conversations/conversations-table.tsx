@@ -9,7 +9,7 @@ import { useConversations } from "./conversations-context";
 
 export function ConversationsTable() {
 	const {
-		state: { rows, sorting, globalFilter, selectedIndex },
+		state: { rows, sorting, globalFilter, selectedIndex, isDragging },
 		actions: {
 			setSorting,
 			setGlobalFilter,
@@ -38,7 +38,7 @@ export function ConversationsTable() {
 	return (
 		// biome-ignore lint/a11y/noStaticElementInteractions: Drag and drop zone
 		<div
-			className="flex-1 border border-slate-800 bg-slate-950/50 overflow-hidden"
+			className="relative flex-1 border border-slate-800 bg-slate-950/50 overflow-hidden"
 			onDragEnter={(event) => {
 				event.preventDefault();
 				setIsDragging(true);
@@ -54,6 +54,13 @@ export function ConversationsTable() {
 			}}
 			onDrop={onDrop}
 		>
+			{isDragging ? (
+				<div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-slate-950/80 border-2 border-dashed border-cyan-500">
+					<div className="text-xl font-bold tracking-widest text-cyan-400 uppercase">
+						Drop file to load
+					</div>
+				</div>
+			) : null}
 			<div className="overflow-auto h-full">
 				<table className="w-full text-[11px]">
 					<thead className="bg-slate-900/80 text-[10px] uppercase tracking-[0.2em] text-slate-500">
