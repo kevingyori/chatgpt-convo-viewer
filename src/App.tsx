@@ -204,7 +204,7 @@ function AppShell() {
 	}, [state.ready]);
 
 	return (
-		<div className="min-h-screen bg-[#0a0c0f] text-slate-100">
+		<div className="min-h-screen">
 			<main className="mx-auto px-3 py-4 sm:px-4 sm:py-5 h-full">
 				<section className="flex flex-wrap items-center gap-2.5 sm:gap-3 text-[11px] uppercase tracking-[0.25em] text-slate-500">
 					<span className="text-slate-300 font-semibold">CHATGPT EXPORT</span>

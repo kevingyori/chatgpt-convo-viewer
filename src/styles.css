@@ -3,7 +3,7 @@
 @import "tailwindcss";
 
 body {
-	@apply m-0;
+	@apply m-0 bg-[#0a0c0f] text-slate-100;
 	font-family:
 		"JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
 		"Liberation Mono", "Courier New", monospace;
