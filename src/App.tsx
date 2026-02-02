@@ -26,6 +26,32 @@ import {
   type IDockviewPanelProps,
 } from 'dockview'
 
+type ToolbarButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement>
+
+function ToolbarButton({ className, ...props }: ToolbarButtonProps) {
+  const base =
+    'inline-flex h-full items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-cyan-400/70'
+  return (
+    <button
+      {...props}
+      type={props.type ?? 'button'}
+      className={className ? `${base} ${className}` : base}
+    />
+  )
+}
+
+function ToolbarIconButton({ className, ...props }: ToolbarButtonProps) {
+  const base =
+    'inline-flex h-full w-6 items-center justify-center border border-slate-700 bg-slate-950 text-[11px] text-cyan-300 hover:border-cyan-400/70'
+  return (
+    <button
+      {...props}
+      type={props.type ?? 'button'}
+      className={className ? `${base} ${className}` : base}
+    />
+  )
+}
+
 type Conversation = {
   title?: string
   create_time?: number
@@ -223,6 +249,7 @@ function ConversationsPanel({
   const [isHelpOpen, setIsHelpOpen] = useState(false)
   const helpRef = useRef<HTMLDivElement | null>(null)
   if (!params) return null
+  const toolbarRowClass = 'flex items-center gap-3 h-7'
 
   const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -285,25 +312,22 @@ function ConversationsPanel({
       onDrop={params.onDrop}
     >
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-        <div className="flex items-center gap-3 h-7">
-          <button
-            type="button"
-            className={`inline-flex h-full items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 text-[10px] uppercase tracking-[0.2em] text-slate-300 cursor-pointer hover:border-cyan-400/70${dragClass}`}
+        <div className={toolbarRowClass}>
+          <ToolbarButton
+            className={`cursor-pointer${dragClass}`}
             onClick={() => inputRef.current?.click()}
           >
             <span className="text-cyan-300">[+]</span>
             <span>Load file</span>
-          </button>
+          </ToolbarButton>
           <div className="relative" ref={helpRef}>
-            <button
-              type="button"
+            <ToolbarIconButton
               aria-label="How to export conversations"
               aria-expanded={isHelpOpen}
-              className="inline-flex h-full w-6 items-center justify-center border border-slate-700 bg-slate-950 text-[11px] text-cyan-300 hover:border-cyan-400/70"
               onClick={() => setIsHelpOpen((open) => !open)}
             >
               ?
-            </button>
+            </ToolbarIconButton>
             {isHelpOpen ? (
               <div className="absolute left-0 top-8 z-10 w-72 border border-slate-700 bg-slate-950/95 p-3 text-[11px] text-slate-200 shadow-lg">
                 <div className="font-semibold text-cyan-200">
@@ -337,14 +361,13 @@ function ConversationsPanel({
             <span className="text-rose-300 text-[11px]">{params.error}</span>
           ) : null}
         </div>
-        <div className="flex items-center gap-3 h-7">
-          <button
-            type="button"
+        <div className={toolbarRowClass}>
+          <ToolbarButton
             onClick={params.onClear}
-            className="inline-flex h-full items-center gap-2 border border-slate-700 bg-slate-950 px-2 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-rose-400/70 hover:text-white transition"
+            className="gap-2 hover:border-rose-400/70 hover:text-white transition"
           >
             <span className="text-rose-300">[x]</span> Clear
-          </button>
+          </ToolbarButton>
           <div className="text-[11px] text-slate-500">
             Total:{' '}
             <span className="text-slate-200">

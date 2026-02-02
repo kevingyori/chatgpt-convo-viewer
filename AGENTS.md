@@ -9,4 +9,8 @@
 - Standard button sizing: `text-[10px]`, `px-2`, `py-0.5`, `gap-1.5` for icon+label buttons.
 - Align buttons to a shared visual height by avoiding mixed `py-1` and `py-0.5` in the same row.
 - Use `h-6` square buttons only for icon-only controls (e.g., `?` tooltip).
+
+## UI Components
+- Prefer small, reusable UI components for toolbar controls instead of repeating long class strings.
+- Keep component APIs minimal (className overrides, common base classes) to enforce consistent sizing.
 </INSTRUCTIONS>
