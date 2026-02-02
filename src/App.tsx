@@ -221,6 +221,7 @@ function ConversationsPanel({
 }: IDockviewPanelProps<ConversationsPanelParams>) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [isHelpOpen, setIsHelpOpen] = useState(false)
+  const helpRef = useRef<HTMLDivElement | null>(null)
   if (!params) return null
 
   const handleDragEnter = (event: DragEvent<HTMLDivElement>) => {
@@ -242,6 +243,23 @@ function ConversationsPanel({
   const dragClass = params.isDragging
     ? ' border-cyan-400/80 bg-cyan-500/10'
     : ''
+
+  useEffect(() => {
+    if (!isHelpOpen) return
+    const handleOutside = (event: MouseEvent | TouchEvent) => {
+      const target = event.target
+      if (!(target instanceof Node)) return
+      if (!helpRef.current?.contains(target)) {
+        setIsHelpOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutside)
+    document.addEventListener('touchstart', handleOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      document.removeEventListener('touchstart', handleOutside)
+    }
+  }, [isHelpOpen])
 
   const table = useReactTable({
     data: params.rows,
@@ -267,27 +285,27 @@ function ConversationsPanel({
       onDrop={params.onDrop}
     >
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 h-7">
           <button
             type="button"
-            className={`inline-flex items-center gap-2 border border-slate-700 bg-slate-950 px-2.5 py-1 text-[11px] uppercase tracking-[0.2em] text-slate-300 cursor-pointer select-none hover:border-cyan-400/70${dragClass}`}
+            className={`inline-flex h-full items-center gap-1.5 border border-slate-700 bg-slate-950 px-2 text-[10px] uppercase tracking-[0.2em] text-slate-300 cursor-pointer hover:border-cyan-400/70${dragClass}`}
             onClick={() => inputRef.current?.click()}
           >
             <span className="text-cyan-300">[+]</span>
             <span>Load file</span>
           </button>
-          <div className="relative">
+          <div className="relative" ref={helpRef}>
             <button
               type="button"
               aria-label="How to export conversations"
               aria-expanded={isHelpOpen}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-slate-700 bg-slate-950 text-[11px] text-cyan-300 hover:border-cyan-400/70"
+              className="inline-flex h-full w-6 items-center justify-center border border-slate-700 bg-slate-950 text-[11px] text-cyan-300 hover:border-cyan-400/70"
               onClick={() => setIsHelpOpen((open) => !open)}
             >
               ?
             </button>
             {isHelpOpen ? (
-              <div className="absolute left-0 top-8 z-10 w-72 rounded border border-slate-700 bg-slate-950/95 p-3 text-[11px] text-slate-200 shadow-lg">
+              <div className="absolute left-0 top-8 z-10 w-72 border border-slate-700 bg-slate-950/95 p-3 text-[11px] text-slate-200 shadow-lg">
                 <div className="font-semibold text-cyan-200">
                   Export steps
                 </div>
@@ -319,11 +337,11 @@ function ConversationsPanel({
             <span className="text-rose-300 text-[11px]">{params.error}</span>
           ) : null}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 h-7">
           <button
             type="button"
             onClick={params.onClear}
-            className="inline-flex items-center gap-2 border border-slate-700 bg-slate-950 px-2.5 py-1 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-rose-400/70 hover:text-white transition"
+            className="inline-flex h-full items-center gap-2 border border-slate-700 bg-slate-950 px-2 text-[10px] uppercase tracking-[0.2em] text-slate-300 hover:border-rose-400/70 hover:text-white transition"
           >
             <span className="text-rose-300">[x]</span> Clear
           </button>
