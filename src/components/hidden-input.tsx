@@ -1,11 +1,11 @@
-import { forwardRef, type InputHTMLAttributes } from 'react'
+import { forwardRef, type InputHTMLAttributes } from "react";
 
-type HiddenInputProps = InputHTMLAttributes<HTMLInputElement>
+type HiddenInputProps = InputHTMLAttributes<HTMLInputElement>;
 
 export const HiddenInput = forwardRef<HTMLInputElement, HiddenInputProps>(
-  ({ className, ...props }, ref) => {
-    return <input ref={ref} {...props} className={className ?? 'sr-only'} />
-  },
-)
+	({ className, ...props }, ref) => {
+		return <input ref={ref} {...props} className={className ?? "sr-only"} />;
+	},
+);
 
-HiddenInput.displayName = 'HiddenInput'
+HiddenInput.displayName = "HiddenInput";
