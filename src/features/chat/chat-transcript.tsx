@@ -1,6 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { formatTimestamp } from "../../lib/format";
 import { Conversations } from "../conversations";
+import type { ChatMatch } from "./chat-context";
 import { useChat } from "./chat-context";
 import { renderChatHighlights } from "./chat-utils";
 
@@ -20,6 +21,21 @@ export function ChatTranscript() {
 		scrollToMatch(match);
 	}, [activeMatchIndex, matches, scrollToMatch]);
 
+	// Optimize match lookup: Group matches by messageId to avoid O(N*M) filtering in the render loop.
+	// This reduces complexity to O(N + M) where N is matches and M is messages.
+	const matchesByMessageId = useMemo(() => {
+		const map = new Map<string, ChatMatch[]>();
+		for (const match of matches) {
+			const list = map.get(match.messageId);
+			if (list) {
+				list.push(match);
+			} else {
+				map.set(match.messageId, [match]);
+			}
+		}
+		return map;
+	}, [matches]);
+
 	return (
 		<div className="flex-1 border border-slate-800 bg-slate-950/50 p-2 overflow-auto">
 			{!selectedConversation ? (
@@ -36,9 +52,7 @@ export function ChatTranscript() {
 						const role = message.authorRole;
 						const isUser = role === "user";
 						const isAssistant = role === "assistant";
-						const messageMatches = matches.filter(
-							(match) => match.messageId === message.id,
-						);
+						const messageMatches = matchesByMessageId.get(message.id) || [];
 						const activeMatch =
 							activeMatchIndex >= 0 ? matches[activeMatchIndex] : null;
 						return (
