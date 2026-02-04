@@ -1,6 +1,7 @@
 import {
 	type ButtonHTMLAttributes,
 	createContext,
+	forwardRef,
 	type HTMLAttributes,
 	type InputHTMLAttributes,
 	type ReactNode,
@@ -111,17 +112,21 @@ function ToolbarIconButton({ className, ...props }: ToolbarButtonProps) {
 	);
 }
 
-function ToolbarInput({ className, ...props }: ToolbarInputProps) {
-	const {
-		meta: { inputClass },
-	} = useToolbarContext();
-	return (
-		<input
-			{...props}
-			className={className ? `${inputClass} ${className}` : inputClass}
-		/>
-	);
-}
+const ToolbarInput = forwardRef<HTMLInputElement, ToolbarInputProps>(
+	({ className, ...props }, ref) => {
+		const {
+			meta: { inputClass },
+		} = useToolbarContext();
+		return (
+			<input
+				ref={ref}
+				{...props}
+				className={className ? `${inputClass} ${className}` : inputClass}
+			/>
+		);
+	},
+);
+ToolbarInput.displayName = "Toolbar.Input";
 
 function ToolbarText({ className, ...props }: ToolbarTextProps) {
 	const {
