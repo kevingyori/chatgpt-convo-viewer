@@ -13,11 +13,14 @@ export function ChatSearch() {
 			rowClass="flex items-center gap-2 h-7"
 		>
 			<Toolbar.Row className="w-full">
-				<span className="text-slate-500">[?]</span>
+				<span className="text-slate-500" aria-hidden="true">
+					[?]
+				</span>
 				<Toolbar.Input
 					value={query}
 					onChange={(event) => setQuery(event.target.value)}
 					placeholder="Search this chat"
+					aria-label="Search this chat"
 					className="interactive w-full py-1"
 				/>
 				<div className="flex items-center gap-1 text-[10px] text-slate-500 whitespace-nowrap">
@@ -25,6 +28,7 @@ export function ChatSearch() {
 						onClick={prevMatch}
 						className="interactive px-1.5 tracking-normal hover:border-cyan-400/70 hover:text-white transition"
 						disabled={matches.length === 0}
+						aria-label="Previous match"
 					>
 						{"[<]"}
 					</Toolbar.Button>
@@ -32,6 +36,7 @@ export function ChatSearch() {
 						onClick={nextMatch}
 						className="interactive px-1.5 tracking-normal hover:border-cyan-400/70 hover:text-white transition"
 						disabled={matches.length === 0}
+						aria-label="Next match"
 					>
 						{"[>]"}
 					</Toolbar.Button>
