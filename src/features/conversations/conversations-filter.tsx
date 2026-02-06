@@ -13,7 +13,9 @@ export function ConversationsFilter() {
 			rowClass="flex items-center gap-2 h-7"
 		>
 			<Toolbar.Row className="w-full">
-				<span className="text-slate-500">[?]</span>
+				<span className="text-slate-500" aria-hidden="true">
+					[?]
+				</span>
 				<Toolbar.Input
 					value={globalFilter}
 					onChange={(event) => setGlobalFilter(event.target.value)}
