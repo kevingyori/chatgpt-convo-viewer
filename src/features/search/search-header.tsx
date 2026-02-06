@@ -25,7 +25,9 @@ export function SearchHeader() {
 					onClick={popoutSearch}
 					className="hover:border-cyan-400/70 hover:text-white transition"
 				>
-					<span className="text-cyan-300">[^]</span>
+					<span className="text-cyan-300" aria-hidden="true">
+						[^]
+					</span>
 					Popout
 				</Toolbar.Button>
 				<span>

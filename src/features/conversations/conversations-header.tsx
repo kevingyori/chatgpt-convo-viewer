@@ -39,7 +39,9 @@ export function ConversationsHeader() {
 					className={`cursor-pointer${dragClass}`}
 					onClick={() => inputRef.current?.click()}
 				>
-					<span className="text-cyan-300">[+]</span>
+					<span className="text-cyan-300" aria-hidden="true">
+						[+]
+					</span>
 					<span>Load file</span>
 				</Toolbar.Button>
 				<div className="relative" ref={helpRef}>
@@ -83,7 +85,10 @@ export function ConversationsHeader() {
 					onClick={onClear}
 					className="gap-2 hover:border-rose-400/70 hover:text-white transition"
 				>
-					<span className="text-rose-300">[x]</span> Clear
+					<span className="text-rose-300" aria-hidden="true">
+						[x]
+					</span>{" "}
+					Clear
 				</Toolbar.Button>
 				<Toolbar.Text>
 					Total:{" "}
